@@ -65,6 +65,19 @@ detectCores()
 #}
 ```
 
+```{r}
+library(broom)
+
+# Fit a linear model
+model <- lm(mpg ~ wt, data = mtcars)
+
+# Convert summary to dataframe
+summary_df <- tidy(summary(model), conf.int = TRUE)
+
+print(summary_df)
+```
+
+
 
 
 

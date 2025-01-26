@@ -1,17 +1,11 @@
 library(tidyverse)
 
 
-# test
-test_func <- function(x) {
-  result <- x^2
-  return(result) 
-}
-
 gen_data <- function(n, beta_true, err_type) {
-  beta0 <- 0
+  beta0 <- 1
   beta_treat <- beta_true
   x <- rbinom(n, 1, prob = 0.5)
-  epsilon <- ifelse (err_type == 1, rnorm(n, sd = sqrt(2)), rlnorm(10, meanlog = 0, sdlog = log(2)))
+  epsilon <- ifelse (err_type == 1, rnorm(n, mean = 0, sd = sqrt(2)), rlnorm(n, mean = 0, sd = sqrt(log(2))))
   y = beta0 + beta_treat * x + epsilon
   
   tibble(
@@ -20,21 +14,23 @@ gen_data <- function(n, beta_true, err_type) {
   )
 }
 
-extract_estim <- function(simdata, beta_true) {
+extract_estim_wald <- function(simdata, beta_true, alpha) {
   x <- simdata$x
   y <- simdata$y
-  model <- lm(y ~ x)
-  model_summary <- summary(model)
+  model <- summary(lm(y ~ x))
   
-  beta_estim <- coef(model)["x"]  
-  std_error <- model_summary$coefficients["x", "Std. Error"]
-  conf_int <- confint(model)["x", ]
+  estims_df <- tidy(model, conf.int = TRUE) %>%
+    filter(term == "x") %>%
+    mutate(coverage = ifelse(beta_true >= conf.low & beta_true <= conf.high, 1, 0)) %>%
+    rename(beta_hat = estimate) %>%
+    rename(se_beta = std.error) %>%
+    mutate(beta_diff = beta_hat - beta_true) %>%
+    mutate(ci_l = beta_hat - qnorm(1 - alpha/ 2) * se_beta) %>%
+    mutate(ci_u = beta_hat + qnorm(1 - alpha/ 2) * se_beta) %>%
+    select(beta_hat, beta_diff, ci_l, ci_u, se_beta, coverage)
   
-  coverage <- (ifelse(conf_int[1] <= beta_true & beta_true <= conf_int[2], 1, 0))
+ 
+  return (estims_df)
   
-  tibble(
-    beta_estim = beta_estim,
-    se_beta = std_error,
-    coverage = coverage
-  )
+  
 }
