@@ -6,24 +6,65 @@ date: "2025-01-25"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+source(here("source", "utils.R"))
+set.seed(50)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+print(test_func(5))
 ```
 
-## Including Plots
+### 1.1: ADEMP Structure 
 
-You can also embed plots, for example:
+Answer the following questions: 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+* How many simulation scenarios will you be running?
+We will be running 3 * 3 * 2   = 18 simulation scenarios
+
+* What are the estimand(s)
+The estimands are the average treatment effect $\beta_{treatment}$ and the 
+standard error of treatment effect $se(\beta_{treatment})$
+
+* What method(s) are being evaluated/compared?
+
+3 methods are being compared - Wald confidence intervals, nonparametric 
+bootstrap percentile intervals, and nonparametric boostrap t-intervals.
+
+* What are the performance measure(s)?
+The performance measures are bias, coverage, and computation time.
+
+# 1.2: nSim
+Based on desired coverage of 95\% with Monte Carlo error of no more than 1\%, how many simulations ($n_{sim}$) should we perform for each simulation scenario?  Implement this number of simulations throughout your simulation study.
+
+
+```{r}
+mc_err <- 0.01
+cover <- 0.95
+alpha <- 1 - 0.95
+n_sim <- (cover * (1 - cover))/mc_err^2
+n_sim
+```
+We should perform 475 simulations for each scenario
+```{r}
+n = c(10, 50, 500)
+beta_true = c(0, 0.5, 2)
+# 1 = normal, 0 = right skewed
+err_norm = c(0, 1)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+library(parallel)
+# Get the number of cores
+detectCores()
+#for (i in 1:n_sim) {
+  
+  
+#}
+```
+
+
+
+

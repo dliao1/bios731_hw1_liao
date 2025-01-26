@@ -1,8 +1,9 @@
 ---
-title: 'Homework 1'
-header-includes:
-  - \usepackage{multirow}
+title: "Homework 1"
+header-includes: \usepackage{multirow}
 output:
+  html_document:
+    df_print: paged
   pdf_document: default
 urlcolor: blue
 ---
