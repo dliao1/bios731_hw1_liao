@@ -38,6 +38,8 @@ param_grid <- expand.grid(
   err_type = err_type
 )
 
+set.seed(2025)
+
 # Seeds for each loop
 seeds <- floor(runif(n_sim, 1, 10000))
 
@@ -56,7 +58,7 @@ wald_results <- foreach(
   ) %do% {
     set.seed(seeds[j])
     simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
-    extract_estim_wald(simdata, params$beta_true, alpha) # could do separate return statement for readability
+    extract_estims(simdata, params$beta_true, alpha) # could do separate return statement for readability
   }
   
   # Save individual parameter combination results
@@ -69,7 +71,7 @@ wald_results <- foreach(
 save(wald_results, file = here("results", "sim_wald", "all_sim_wald_scenarios.RDA"))
 
 # Parallelized Bootstrap results
-boot_results <- foreach(
+boot_percent_results <- foreach(
   i = 1:nrow(param_grid),
   .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach")
 ) %dopar% {
@@ -83,7 +85,7 @@ boot_results <- foreach(
   ) %do% {
     set.seed(seeds[j])
     simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
-    extract_estim_boot(simdata, params$beta_true, alpha) # separate return statement for readability?
+    extract_estim_boot_percent(simdata, params$beta_true, alpha) # separate return statement for readability?
   }
   
   # Save individual parameter combination results
@@ -93,7 +95,7 @@ boot_results <- foreach(
   return(all_boot_percent_estim)
 }
 
-save(boot_results, file = here("results", "sim_boot", "all_sim_boot_scenarios.RDA"))
+save(boot_percent_results, file = here("results", "sim_boot", "all_sim_boot_scenarios.RDA"))
 
 
 stopCluster(cl)
