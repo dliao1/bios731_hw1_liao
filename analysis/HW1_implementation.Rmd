@@ -4,17 +4,15 @@ output: html_document
 date: "2025-01-25"
 ---
 
-```{r setup, include=FALSE}
+```{r}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(here)
 source(here("source", "utils.R"))
-set.seed(50)
-```
+source(here("simulations", "run_sim_wald.R"))
 
-```{r}
-print(test_func(5))
+set.seed(50)
 ```
 
 ### 1.1: ADEMP Structure 
@@ -46,35 +44,6 @@ cover <- 0.95
 alpha <- 1 - 0.95
 n_sim <- (cover * (1 - cover))/mc_err^2
 n_sim
-```
-We should perform 475 simulations for each scenario
-```{r}
-n = c(10, 50, 500)
-beta_true = c(0, 0.5, 2)
-# 1 = normal, 0 = right skewed
-err_norm = c(0, 1)
-```
-
-```{r}
-library(parallel)
-# Get the number of cores
-detectCores()
-#for (i in 1:n_sim) {
-  
-  
-#}
-```
-
-```{r}
-library(broom)
-
-# Fit a linear model
-model <- lm(mpg ~ wt, data = mtcars)
-
-# Convert summary to dataframe
-summary_df <- tidy(summary(model), conf.int = TRUE)
-
-print(summary_df)
 ```
 
 
