@@ -38,7 +38,7 @@ param_grid <- expand.grid(
   err_type = err_type
 )
 
-set.seed(2025)
+set.seed(3000)
 
 # Seeds for each loop
 seeds <- floor(runif(n_sim, 1, 10000))

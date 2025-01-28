@@ -38,7 +38,7 @@ extract_estims <- function(simdata, beta_true, alpha) {
 
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
 extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
-  nboot <- 1000  # Number of bootstrap samples, 1 right now so its fast
+  nboot <- 100  # Number of bootstrap samples, 1 right now so its fast
   all_boot_betas <- numeric(nboot)  # Preallocate a numeric vector
   
   for (i in 1:nboot) {
@@ -51,7 +51,7 @@ extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
     
     # Extract beta_treatment
     model_estims <- extract_estims(boot_sample, beta_true, alpha)
-    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, NA)
+    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, 0)
     
   }
   
