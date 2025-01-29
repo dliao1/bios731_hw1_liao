@@ -8,7 +8,12 @@ gen_data <- function(n, beta_true, err_type) {
   beta0 <- 1
   beta_treat <- beta_true
   x <- rbinom(n, 1, prob = 0.5)
+  
+  while (length(unique(x)) == 1) {
+    x <- rbinom(n, 1, prob = 0.5)
+  }
   epsilon <- ifelse (err_type == 1, rnorm(n, mean = 0, sd = sqrt(2)), rlnorm(n, meanlog = 0, sdlog = sqrt(log(2))))
+  
   y = beta0 + beta_treat * x + epsilon
   
   tibble(
@@ -18,9 +23,7 @@ gen_data <- function(n, beta_true, err_type) {
 }
 
 extract_estims <- function(simdata, beta_true, alpha) {
-  x <- simdata$x
-  y <- simdata$y
-  model <- summary(lm(y ~ x))
+  model <- lm(y ~ x, data = simdata)
   
   estims_df <- tidy(model, conf.int = TRUE) %>%
     filter(term == "x") %>%
@@ -38,20 +41,19 @@ extract_estims <- function(simdata, beta_true, alpha) {
 
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
 extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
-  nboot <- 100  # Number of bootstrap samples, 1 right now so its fast
+  nboot <- 50  # Number of bootstrap samples, 1 right now so its fast
   all_boot_betas <- numeric(nboot)  # Preallocate a numeric vector
   
   for (i in 1:nboot) {
     # Non-parametric bootstrap sample
-    indices <- sample(seq_len(nrow(simdata)), size = nrow(simdata), replace = TRUE)
-    boot_sample <- simdata[indices, , drop = FALSE]
+    boot_sample <- slice_sample(simdata, n = nrow(simdata), replace = TRUE)
     
     # Fit linear model
     model <- lm(y ~ x, data = boot_sample)
     
     # Extract beta_treatment
     model_estims <- extract_estims(boot_sample, beta_true, alpha)
-    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, 0)
+    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, NA)
     
   }
   
@@ -60,7 +62,9 @@ extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
   se_beta_hat <- sd(all_boot_betas, na.rm = TRUE) / sqrt(length(all_boot_betas))  # slide 14? 
   
   # Percentile confidence interval
-  percentile_ci <- quantile(all_boot_betas, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
+  percentile_ci <- quantile(all_boot_betas, probs = c(alpha/2, 1 - (alpha/2)), na.rm = TRUE)
+  
+  # why are my rows NA if my sample size is 10.
   
   boot_percent_df <- tibble(
     mean_beta_hat = mean_beta_hat,

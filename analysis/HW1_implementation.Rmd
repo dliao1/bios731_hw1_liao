@@ -50,9 +50,39 @@ n_sim
 ```
 
 ```{r}
-load(here("results", "sim_boot", "scenario_18.RDA"))
 
-mean(all_boot_percent_estim$coverage == 1) * 100
+
+# Define the number of scenarios
+num_scenarios <- 18
+
+# Initialize an empty data frame to store results
+coverage_results <- data.frame(
+  scenario = integer(),
+  coverage_percentage = numeric()
+)
+
+# Loop through each scenario file
+for (i in 1:num_scenarios) {
+  # Construct the file path
+  file_path <- here("results", "sim_boot", paste0("scenario_", i, ".RDA"))
+  
+  # Load the scenario file
+  load(file_path)
+  
+  # Calculate the coverage percentage
+  coverage_percentage <- mean(all_boot_percent_estim$coverage == 1) * 100
+  
+  # Store the result
+  coverage_results <- rbind(
+    coverage_results,
+    data.frame(scenario = i, coverage_percentage = coverage_percentage)
+  )
+}
+
+# Print the results
+print(coverage_results)
+
+
 
 ```
 

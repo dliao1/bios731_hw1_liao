@@ -19,7 +19,7 @@ if (!dir.exists(here("results", "sim_boot"))) {
 }
 
 # Cluster setup
-cl <- makeCluster(4)  # Use 8 cores
+cl <- makeCluster(12)  # Use 8 cores
 registerDoParallel(cl)
 
 # Simulation setup
@@ -46,16 +46,18 @@ seeds <- floor(runif(n_sim, 1, 10000))
 # Parallelized Wald results
 wald_results <- foreach(
   i = 1:nrow(param_grid),
-  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach")
-) %dopar% {
+  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
+  .inorder = FALSE
+) %do% {
   params <- param_grid[i, ]
   
   # Run simulations for n_sim in parallel
   all_wald_estim <- foreach(
     j = 1:n_sim,
     .combine = rbind,  # i want this to stay a list of dfs
-    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach")
-  ) %do% {
+    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
+    .inorder = FALSE
+  ) %dopar% {
     set.seed(seeds[j])
     simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
     extract_estims(simdata, params$beta_true, alpha) # could do separate return statement for readability
@@ -73,16 +75,18 @@ save(wald_results, file = here("results", "sim_wald", "all_sim_wald_scenarios.RD
 # Parallelized Bootstrap results
 boot_percent_results <- foreach(
   i = 1:nrow(param_grid),
-  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach")
-) %dopar% {
+  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
+  .inorder = FALSE
+) %do% {
   params <- param_grid[i, ]
   
   # Run simulations for n_sim in parallel
   all_boot_percent_estim <- foreach(
     j = 1:n_sim,
     .combine = rbind,  
-    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach")
-  ) %do% {
+    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
+    .inorder = FALSE
+  ) %dopar% {
     set.seed(seeds[j])
     simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
     extract_estim_boot_percent(simdata, params$beta_true, alpha) # separate return statement for readability?
@@ -99,3 +103,8 @@ save(boot_percent_results, file = here("results", "sim_boot", "all_sim_boot_scen
 
 
 stopCluster(cl)
+
+
+#se_hat_beta_hat is done at the end of every bootstrap loop bc we take all estimated betas - mean estimated beta
+# over all n_sims
+# So that should be 1 per parameter combo!!!!!!!!!!!
