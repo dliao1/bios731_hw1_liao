@@ -23,16 +23,20 @@ gen_data <- function(n, beta_true, err_type) {
 }
 
 extract_estims <- function(simdata, beta_true, alpha) {
+  df <- nrow(simdata) - 2
+  
   model <- lm(y ~ x, data = simdata)
   
   estims_df <- tidy(model, conf.int = TRUE) %>%
     filter(term == "x") %>%
-    mutate(coverage = ifelse(beta_true >= conf.low & beta_true <= conf.high, 1, 0)) %>%
     rename(beta_hat = estimate) %>%
     rename(se_beta = std.error) %>%
     mutate(beta_diff = beta_hat - beta_true) %>%
     mutate(ci_l = beta_hat - qnorm(1 - alpha/ 2) * se_beta) %>%
     mutate(ci_u = beta_hat + qnorm(1 - alpha/ 2) * se_beta) %>%
+    #mutate(coverage = ifelse(beta_true >= ci_l & beta_true <= ci_u, 1, 0)) %>%
+    mutate(coverage = ifelse(beta_true >= conf.low & beta_true <= conf.high, 1, 0)) %>%
+    
     select(beta_hat, beta_diff, ci_l, ci_u, se_beta, coverage)
   
  
@@ -41,7 +45,7 @@ extract_estims <- function(simdata, beta_true, alpha) {
 
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
 extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
-  nboot <- 50  # Number of bootstrap samples, 1 right now so its fast
+  nboot <- 100  # Number of bootstrap samples, 1 right now so its fast
   all_boot_betas <- numeric(nboot)  # Preallocate a numeric vector
   
   for (i in 1:nboot) {

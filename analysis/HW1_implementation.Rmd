@@ -64,13 +64,13 @@ coverage_results <- data.frame(
 # Loop through each scenario file
 for (i in 1:num_scenarios) {
   # Construct the file path
-  file_path <- here("results", "sim_boot", paste0("scenario_", i, ".RDA"))
+  file_path <- here("results", "sim_wald", paste0("scenario_", i, ".RDA"))
   
   # Load the scenario file
   load(file_path)
   
   # Calculate the coverage percentage
-  coverage_percentage <- mean(all_boot_percent_estim$coverage == 1) * 100
+  coverage_percentage <- mean(all_wald_estim$coverage == 1) * 100
   
   # Store the result
   coverage_results <- rbind(
@@ -84,12 +84,6 @@ print(coverage_results)
 
 
 
-```
-
-```{r}
-load(here("results", "sim_wald", "scenario_18.RDA"))
-
-unique(all_wald_estim$coverage)
 ```
 
 
