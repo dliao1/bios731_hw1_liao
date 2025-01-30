@@ -12,7 +12,7 @@ gen_data <- function(n, beta_true, err_type) {
   while (length(unique(x)) == 1) {
     x <- rbinom(n, 1, prob = 0.5)
   }
-  epsilon <- ifelse (err_type == 1, rnorm(n, mean = 0, sd = sqrt(2)), rlnorm(n, meanlog = 0, sdlog = sqrt(log(2))))
+  epsilon <- ifelse (err_type == 1, rnorm(n, mean = 0, sd = sqrt(2)), rlnorm(n, mean = 0, sd = sqrt(log(2))))
   
   y = beta0 + beta_treat * x + epsilon
   
@@ -22,10 +22,10 @@ gen_data <- function(n, beta_true, err_type) {
   )
 }
 
-extract_estims <- function(simdata, beta_true, alpha) {
+extract_estims <- function(data, beta_true, alpha) {
   df <- nrow(simdata) - 2
   
-  model <- lm(y ~ x, data = simdata)
+  model <- lm(y ~ x, data = data)
   
   estims_df <- tidy(model, conf.int = TRUE) %>%
     filter(term == "x") %>%
@@ -44,13 +44,13 @@ extract_estims <- function(simdata, beta_true, alpha) {
 }
 
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
-extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
+extract_estim_boot_percent <- function(data, beta_true, alpha) {
   nboot <- 100  # Number of bootstrap samples, 1 right now so its fast
   all_boot_betas <- numeric(nboot)  # Preallocate a numeric vector
   
   for (i in 1:nboot) {
     # Non-parametric bootstrap sample
-    boot_sample <- slice_sample(simdata, n = nrow(simdata), replace = TRUE)
+    boot_sample <- slice_sample(data, n = nrow(data), replace = TRUE)
     
     # Fit linear model
     model <- lm(y ~ x, data = boot_sample)
@@ -77,42 +77,44 @@ extract_estim_boot_percent <- function(simdata, beta_true, alpha) {
     ci_u = percentile_ci[2]
   )
   
-  boot_percent_df <- boot_percent_df %>% mutate(coverage = ifelse(beta_true >= ci_l & beta_true <= ci_u, 1, 0))
+  boot_percent_df <- boot_percent_df %>%
+    mutate(coverage = ifelse(!is.na(ci_l) & !is.na(ci_u) & beta_true >= ci_l & beta_true <= ci_u, 1, 0))
   return(boot_percent_df)
   
 }
   
   
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
-extract_estim_boot_t <- function(simdata, beta_true, alpha) {
-  model_estims <- extract_estims(simdata, beta_true, alpha)
-  beta_hat <- model_estims$beta_hat
+extract_estim_boot_t <- function(data, beta_true, alpha) {
+  original_model_estims <- extract_estims(data, beta_true, alpha)
+  beta_hat <- original_model_estims$beta_hat
   
-  nboot <- 1  # Number of bootstrap samples, 1 right now so its fast
-  nboot_t <- 1 # Inner loop to calculate t star
+  nboot <- 10  # Number of bootstrap samples, 1 right now so its fast
+  nboot_t <- 10 # Inner loop to calculate t star
   
   all_boot_betas <- numeric(nboot)  # Preallocate a numeric vector
   all_nested_boot_betas <- numeric(nboot_t)
-  all_tstars <- numeric(nboot_t)
+  t_star <- numeric(nboot_t)
   
   for (i in 1:nboot) {
     # Non-parametric bootstrap sample
-    # is this better/faster than slice_sample?
-    indices <- sample(seq_len(nrow(simdata)), size = nrow(simdata), replace = TRUE) # could probably replace with params$n to make it cleaner
-    boot_sample <- simdata[indices, , drop = FALSE]
-    
+    boot_sample <- slice_sample(data, n = nrow(data), replace = TRUE)
+
     # Fit linear model and extract beta_treatment
-    model_estims <- extract_estims(boot_sample, beta_true, alpha)
+    first_model_estims <- extract_estims(data = boot_sample, 
+                                   beta_true = beta_true, 
+                                   alpha = alpha)
     
     # Return the estimate or NA if invalid
-    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, NA)
+    all_boot_betas[i] <- ifelse(nrow(first_model_estims) == 1, first_model_estims$beta_hat, NA)
     
     for (j in 1:nboot_t) {
-      nested_indices <- sample(seq_len(nrow(boot_sample)), size = nrow(boot_sample), replace = TRUE)
-      nested_boot_sample <- simdata[nested_indices, , drop = FALSE]
-      model <- lm(y ~ x, data = nested_boot_sample)
-      model_estims <- extract_estims(boot_sample, beta_true, alpha)
-      all_nested_boot_betas[j] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, NA)
+      nested_boot_sample <- slice_sample(boot_sample, n = nrow(boot_sample), replace = TRUE)
+      nested_model_estims <- extract_estims(data = nested_boot_sample, 
+                                     beta_true = beta_true, 
+                                     alpha = alpha)
+      
+      all_nested_boot_betas[j] <- ifelse(nrow(nested_model_estims) == 1, nested_model_estims$beta_hat, NA)
       
     }
     se_star = sd(all_nested_boot_betas,  na.rm = TRUE) # is this right... idk
@@ -131,7 +133,7 @@ extract_estim_boot_t <- function(simdata, beta_true, alpha) {
   percentile_ci <- quantile(all_boot_betas, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
   
   # quantile CI for bootstrap t
-  t_quants = quantile(tstar, probs = c(alpha/2, 1-(alpha/2)),  na.rm = TRUE)
+  t_quants = quantile(t_star, probs = c(alpha/2, 1-(alpha/2)),  na.rm = TRUE)
   se_beta_hat = sd(all_boot_betas)
   
   # lower CI
@@ -148,6 +150,7 @@ extract_estim_boot_t <- function(simdata, beta_true, alpha) {
     t_ci_u = boot_t_ci_u,
   )
   
-  boot_t_df <- boot_percent_df %>% mutate(coverage = ifelse(beta_true >= t_ci_l & beta_true <= t_ci_u, 1, 0))
+  boot_t_df <- boot_t_df %>%
+    mutate(coverage = ifelse(!is.na(t_ci_l) & !is.na(t_ci_u) & beta_true >= t_ci_l & beta_true <= t_ci_u, 1, 0))
   return(boot_t_df)
 }

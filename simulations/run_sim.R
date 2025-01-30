@@ -7,30 +7,33 @@ library(here)
 source(here("source", "utils.R"))
 options(pillar.sigfig = 15)
 
-# Ensure necessary directories exist
+# Makes sure directories exist
 if (!dir.exists(here("results"))) {
   dir.create(here("results"))
 }
 if (!dir.exists(here("results", "sim_wald"))) {
   dir.create(here("results", "sim_wald"))
 }
-if (!dir.exists(here("results", "sim_boot"))) {
-  dir.create(here("results", "sim_boot"))
+if (!dir.exists(here("results", "sim_boot_percentile"))) {
+  dir.create(here("results", "sim_boot_percentile"))
+}
+if (!dir.exists(here("results", "sim_boot_t"))) {
+  dir.create(here("results", "sim_boot_t"))
 }
 
 # Cluster setup
-cl <- makeCluster(12)  # Use 8 cores
+cl <- makeCluster(12)  # Use 12 cores
 registerDoParallel(cl)
 
 # Simulation setup
 mc_err <- 0.01
 cover <- 0.95
 alpha <- 1 - 0.95
-n_sim <- round((cover * (1 - cover)) / mc_err^2)  
+n_sim <- round((cover * (1 - cover)) / mc_err^2)
 
 n <- c(10, 50, 500)
 beta_true <- c(0, 0.5, 2)
-err_type <- c(0, 1)  # 1 = normal, 0 = right-skewed
+err_type <- c(0, 1)  # 1 = normal, 0 = lognormal
 
 param_grid <- expand.grid(
   n = n,
@@ -40,71 +43,79 @@ param_grid <- expand.grid(
 
 set.seed(3000)
 
-# Seeds for each loop
+# Seeds!
 seeds <- floor(runif(n_sim, 1, 10000))
 
-# Parallelized Wald results
-wald_results <- foreach(
-  i = 1:nrow(param_grid),
-  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
-  .inorder = FALSE
-) %do% {
+# Iterates through 18 parameter combinations
+for (i in 1:nrow(param_grid)) {
   params <- param_grid[i, ]
   
-  # Run simulations for n_sim in parallel
-  all_wald_estim <- foreach(
+  # Runs 475 simulations per parameter combo
+  # Overall structure goal:  18 data frames x 475 rows for each method (Wald/percentile/t)
+  
+  # sim_results structure: dataframe with 475 rows, and 2 columns, each column is a list form of a 
+  # dataframe for specified method, i.e. sim_results$wald and sim_results$boot each have 475 rows, with each 1 row
+  # having info abt the estimated beta_hat, std error, confidence interval, etc. for that specific simulation run 
+  # Each simulation run adds another row to the dataframe.
+  
+  # At the end of all 475 simulations for the current scenario, I can just convert every row
+  # of sim_results to 1-row dataframes and bind them to their corresponding method (Wald/percentile/etc.) dataframe
+  # End result: 
+  # all_wald_estim = 1 dataframe, 475 rows
+  
+  sim_results <- foreach(
     j = 1:n_sim,
-    .combine = rbind,  # i want this to stay a list of dfs
-    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
-    .inorder = FALSE
+    .combine = rbind,
+    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here")
   ) %dopar% {
     set.seed(seeds[j])
+    
+    # Generates simulated data
     simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
-    extract_estims(simdata, params$beta_true, alpha) # could do separate return statement for readability
+    
+    # Computes Estimates
+    # Note each: each result is one (1) single row
+    wald_result <- extract_estims(data = simdata, 
+                                  beta_true = params$beta_true, 
+                                  alpha = alpha)
+    wald_result <- cbind(wald_result, scenario = i, sim = j, params)
+    
+    # Computes Bootstrap Percentile estimates
+    boot_percent_result <- extract_estim_boot_percent(data = simdata, 
+                                              beta_true = params$beta_true, 
+                                              alpha = alpha)
+    boot_percent_result <- cbind(boot_percent_result, scenario = i, sim = j, params)
+    
+    # Boot t estimates
+    boot_t_result <- extract_estim_boot_t(data = simdata, 
+                                                      beta_true = params$beta_true, 
+                                                      alpha = alpha)
+    boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
+    
+    # Casts 2 rows into 2 lists and makes 2 columns, 1 for each list
+    tibble(
+      wald = list(wald_result),
+      boot_percent = list(boot_percent_result),
+      boot_t = list(boot_t_result)
+    )
   }
   
-  # Save individual parameter combination results
-  filename <- paste0("scenario_", i, ".RDA")
-  save(all_wald_estim, file = here("results", "sim_wald", filename))
+  # Turns each row in wald column into dataframe and binds all rows together for all 475 wald results for current
+  #simulation
+  all_wald_estim <- bind_rows(lapply(sim_results$wald, as.data.frame))
+  all_boot_percent_estim <- bind_rows(lapply(sim_results$boot_percent, as.data.frame))
+  all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
   
-  return(all_wald_estim)
+  # Save **only** the single scenario’s results, not the full list!
+  save(all_wald_estim, file = here("results", "sim_wald", paste0("scenario_", i, ".RDA")))
+  save(all_boot_percent_estim, file = here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA")))
+  save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
+  
+  
+  # Print progress
+  cat(sprintf("Saved scenario %d (n = %d, beta_true = %.2f, err_type = %d)\n",
+              i, params$n, params$beta_true, params$err_type))
 }
 
-save(wald_results, file = here("results", "sim_wald", "all_sim_wald_scenarios.RDA"))
-
-# Parallelized Bootstrap results
-boot_percent_results <- foreach(
-  i = 1:nrow(param_grid),
-  .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
-  .inorder = FALSE
-) %do% {
-  params <- param_grid[i, ]
-  
-  # Run simulations for n_sim in parallel
-  all_boot_percent_estim <- foreach(
-    j = 1:n_sim,
-    .combine = rbind,  
-    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "doParallel", "foreach"),
-    .inorder = FALSE
-  ) %dopar% {
-    set.seed(seeds[j])
-    simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
-    extract_estim_boot_percent(simdata, params$beta_true, alpha) # separate return statement for readability?
-  }
-  
-  # Save individual parameter combination results
-  filename <- paste0("scenario_", i, ".RDA")
-  save(all_boot_percent_estim, file = here("results", "sim_boot", filename))
-  
-  return(all_boot_percent_estim)
-}
-
-save(boot_percent_results, file = here("results", "sim_boot", "all_sim_boot_scenarios.RDA"))
-
-
+# Stop the cluster
 stopCluster(cl)
-
-
-#se_hat_beta_hat is done at the end of every bootstrap loop bc we take all estimated betas - mean estimated beta
-# over all n_sims
-# So that should be 1 per parameter combo!!!!!!!!!!!
