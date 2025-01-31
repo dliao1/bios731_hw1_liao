@@ -21,6 +21,11 @@ if (!dir.exists(here("results", "sim_boot_t"))) {
   dir.create(here("results", "sim_boot_t"))
 }
 
+if (!dir.exists(here("results", "sim_data"))) {
+  dir.create(here("results", "sim_data"))
+}
+
+
 # Cluster setup
 cl <- makeCluster(12)  # Use 12 cores
 registerDoParallel(cl)
@@ -41,15 +46,13 @@ param_grid <- expand.grid(
   err_type = err_type
 )
 
-set.seed(3000)
 
 # Seeds!
+set.seed(3000)
 seeds <- floor(runif(n_sim, 1, 10000))
-
 # Iterates through 18 parameter combinations
 for (i in 1:nrow(param_grid)) {
   params <- param_grid[i, ]
-  
   # Runs 475 simulations per parameter combo
   # Overall structure goal:  18 data frames x 475 rows for each method (Wald/percentile/t)
   
@@ -69,34 +72,53 @@ for (i in 1:nrow(param_grid)) {
     .packages = c("tibble", "dplyr", "tidyverse", "broom", "here")
   ) %dopar% {
     set.seed(seeds[j])
-    
     # Generates simulated data
-    simdata <- gen_data(n = params$n, beta_true = params$beta_true, err_type = params$err_type)
+    simdata <- gen_data(n = params$n, 
+                        beta_true = params$beta_true, 
+                        err_type = params$err_type
+                        )
+
+    # try to restructure this so that i get the bootstrapped data stuff here
+    
     
     # Computes Estimates
     # Note each: each result is one (1) single row
-    wald_result <- extract_estims(data = simdata, 
+    
+    model_fit <- fit_model(simdata)
+    
+    
+    wald_result <- extract_estims(model = model_fit, 
                                   beta_true = params$beta_true, 
                                   alpha = alpha)
     wald_result <- cbind(wald_result, scenario = i, sim = j, params)
     
     # Computes Bootstrap Percentile estimates
-    boot_percent_result <- extract_estim_boot_percent(data = simdata, 
-                                              beta_true = params$beta_true, 
-                                              alpha = alpha)
+    nboot <- 50
+    boot_data <- get_boot_data(original_data = simdata, 
+                               beta_true = params$beta_true, 
+                               sample_size = params$n,
+                               nboot = nboot,
+                               alpha = alpha)
+    
+    boot_percent_result <- extract_estim_boot_percent(all_boot_betas = boot_data,
+                               beta_true = params$beta_true,
+                               alpha = alpha)
+    
+
     boot_percent_result <- cbind(boot_percent_result, scenario = i, sim = j, params)
     
     # Boot t estimates
-    boot_t_result <- extract_estim_boot_t(data = simdata, 
-                                                      beta_true = params$beta_true, 
-                                                      alpha = alpha)
-    boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
+    #boot_t_result <- extract_estim_boot_t(data = simdata, 
+    #                                                  beta_true = params$beta_true, 
+    #                                                  alpha = alpha)
+    #boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
     
     # Casts 2 rows into 2 lists and makes 2 columns, 1 for each list
     tibble(
       wald = list(wald_result),
       boot_percent = list(boot_percent_result),
-      boot_t = list(boot_t_result)
+      sim_data = list(simdata)
+      #boot_t = list(boot_t_result)
     )
   }
   
@@ -104,12 +126,15 @@ for (i in 1:nrow(param_grid)) {
   #simulation
   all_wald_estim <- bind_rows(lapply(sim_results$wald, as.data.frame))
   all_boot_percent_estim <- bind_rows(lapply(sim_results$boot_percent, as.data.frame))
-  all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
+  all_sim_data <- bind_rows(lapply(sim_results$sim_data, as.data.frame))
+  #all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
   
   # Save **only** the single scenario’s results, not the full list!
   save(all_wald_estim, file = here("results", "sim_wald", paste0("scenario_", i, ".RDA")))
   save(all_boot_percent_estim, file = here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA")))
-  save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
+  save(all_sim_data, file = here("results", "sim_data", paste0("scenario_", i, ".RDA")))
+  
+  #save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
   
   
   # Print progress

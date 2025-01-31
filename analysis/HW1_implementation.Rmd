@@ -48,12 +48,14 @@ n_sim
 
 
 ```
-
+# Wald coverages
 ```{r}
-
 library(dplyr)
 
 # Define the number of scenarios
+# only first 8 done for boot_t
+
+
 num_scenarios <- 18
 
 # Initialize an empty data frame to store results
@@ -64,44 +66,114 @@ coverage_results <- data.frame(
 
 # Loop through each scenario file
 for (i in 1:num_scenarios) {
-  # Construct the file path
-  file_path <- here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA"))
+  file_path <- here("results", "sim_wald", paste0("scenario_", i, ".RDA"))
+    load(file_path)
   
-  # Load the scenario file
-  load(file_path)
-  
-  # Calculate the coverage percentage
-  all_ones <- all_boot_percent_estim %>% filter(coverage == 1)
+  # Calculates the coverage percentage
+  all_ones <- all_wald_estim %>% filter(coverage == 1)
   coverage_percentage <- (nrow(all_ones) / 475) * 100
-  
-  # Store the result
+
   coverage_results <- rbind(
     coverage_results,
     data.frame(scenario = i, coverage_percentage = coverage_percentage)
   )
 }
 
-# Print the results
+print(coverage_results)
+
+
+```
+
+
+
+# Bootstrap percentile coverages
+```{r}
+
+library(dplyr)
+
+# Define the number of scenarios
+# only first 8 done for boot_t
+
+
+num_scenarios <- 18
+
+# Initialize an empty data frame to store results
+coverage_results <- data.frame(
+  scenario = integer(),
+  coverage_percentage = numeric()
+)
+
+# Loop through each scenario file
+for (i in 1:num_scenarios) {
+  file_path <- here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA"))
+    load(file_path)
+  
+  # Calculates the coverage percentage
+  all_ones <- all_boot_percent_estim %>% filter(coverage == 1)
+  coverage_percentage <- (nrow(all_ones) / 475) * 100
+
+  coverage_results <- rbind(
+    coverage_results,
+    data.frame(scenario = i, coverage_percentage = coverage_percentage)
+  )
+}
+
 print(coverage_results)
 
 
 
 ```
 
+# Bootstrap t coverages
+```{r}
+
+library(dplyr)
+
+# Define the number of scenarios
+# only first 8 done for boot_t
+
+
+num_scenarios <- 8
+
+# Initialize an empty data frame to store results
+coverage_results <- data.frame(
+  scenario = integer(),
+  coverage_percentage = numeric()
+)
+
+# Loop through each scenario file
+for (i in 1:num_scenarios) {
+  file_path <- here("results", "sim_boot_t", paste0("scenario_", i, ".RDA"))
+  load(file_path)
+  
+  # Calculates the coverage percentage
+  all_ones <- all_boot_t_estim %>% filter(t_coverage == 1)
+  coverage_percentage <- (nrow(all_ones) / 475) * 100
+
+  coverage_results <- rbind(
+    coverage_results,
+    data.frame(scenario = i, coverage_percentage = coverage_percentage)
+  )
+}
+
+print(coverage_results)
+
+
+
+```
+
+```{r}
+file_path <- here("results", "sim_data", paste0("scenario_", 1, ".RDA"))
+load(file_path)
+
+all_sim_data
+```
 
 
 ```{r}
-file_path <- here("results", "sim_wald", paste0("scenario_", 1, ".RDA"))
-  
-  # Load the scenario file
+file_path <- here("results", "sim_boot_percentile", paste0("scenario_", 1, ".RDA"))
 load(file_path)
-all_wald_estim
 
-file_path <- here("results", "sim_wald", paste0("scenario_", 2, ".RDA"))
-  
-  # Load the scenario file
-load(file_path)
-all_wald_estim
+all_boot_percent_estim
 ```
-
 
