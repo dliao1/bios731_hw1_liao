@@ -94,6 +94,7 @@ for (i in 1:nrow(param_grid)) {
     
     # Computes Bootstrap Percentile estimates
     nboot <- 50
+    nboot_t <- 10
     boot_data <- get_boot_data(original_data = simdata, 
                                beta_true = params$beta_true, 
                                sample_size = params$n,
@@ -108,17 +109,29 @@ for (i in 1:nrow(param_grid)) {
     boot_percent_result <- cbind(boot_percent_result, scenario = i, sim = j, params)
     
     # Boot t estimates
-    #boot_t_result <- extract_estim_boot_t(data = simdata, 
-    #                                                  beta_true = params$beta_true, 
-    #                                                  alpha = alpha)
-    #boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
+    
+    boot_t_data <- get_boot_t_data(original_data = simdata, 
+                               beta_true = params$beta_true, 
+                               sample_size = params$n,
+                               alpha = alpha,
+                               nboot = nboot,
+                               nboot_t = nboot_t)
+    
+    boot_t_result <- extract_estim_boot_t(original_data = simdata,
+                                          all_boot_betas = boot_t_data$boot_betas,
+                                          se_stars = boot_t_data$se_stars,
+                                          beta_true = params$beta_true,
+                                          alpha = alpha)
+    
+
+    boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
     
     # Casts 2 rows into 2 lists and makes 2 columns, 1 for each list
     tibble(
       wald = list(wald_result),
       boot_percent = list(boot_percent_result),
-      sim_data = list(simdata)
-      #boot_t = list(boot_t_result)
+      sim_data = list(simdata),
+      boot_t = list(boot_t_result)
     )
   }
   
@@ -127,14 +140,13 @@ for (i in 1:nrow(param_grid)) {
   all_wald_estim <- bind_rows(lapply(sim_results$wald, as.data.frame))
   all_boot_percent_estim <- bind_rows(lapply(sim_results$boot_percent, as.data.frame))
   all_sim_data <- bind_rows(lapply(sim_results$sim_data, as.data.frame))
-  #all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
+  all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
   
   # Save **only** the single scenario’s results, not the full list!
   save(all_wald_estim, file = here("results", "sim_wald", paste0("scenario_", i, ".RDA")))
   save(all_boot_percent_estim, file = here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA")))
   save(all_sim_data, file = here("results", "sim_data", paste0("scenario_", i, ".RDA")))
-  
-  #save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
+  save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
   
   
   # Print progress
