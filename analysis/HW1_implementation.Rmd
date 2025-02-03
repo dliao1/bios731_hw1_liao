@@ -6,7 +6,6 @@ date: "2025-01-25"
 
 ```{r}
 knitr::opts_chunk$set(echo = TRUE)
-
 library(tidyverse)
 library(here)
 #source(here("source", "utils.R"))
@@ -95,7 +94,7 @@ library(dplyr)
 # only first 8 done for boot_t
 
 
-num_scenarios <- 1
+num_scenarios <- 18
 
 # Initialize an empty data frame to store results
 coverage_results <- data.frame(
@@ -133,7 +132,7 @@ library(dplyr)
 # only first 8 done for boot_t
 
 
-num_scenarios <- 1
+num_scenarios <- 18
 
 # Initialize an empty data frame to store results
 coverage_results <- data.frame(

@@ -1,36 +1,7 @@
 library(tidyverse)
 library(doParallel)
 library(foreach)
-
-
-
-gen_data <- function(n, beta_true, err_type) {
-  beta0 <- 1
-  beta_treat <- beta_true
-  x <- rbinom(n, 1, prob = 0.5)
-  
-  while (length(unique(x)) == 1) {
-    x <- rbinom(n, 1, prob = 0.5)
-  }
-  epsilon <- rep(NA, n)
-  
-  if (err_type == 1) {
-    epsilon <- rnorm(n, mean = 0, sd = sqrt(2))
-  } else {
-    epsilon <- rlnorm(n, mean = 0, sd = sqrt(log(2)))
-  }
-  
-  y = beta0 + beta_treat * x + epsilon
-  tibble(
-    x = x,
-    y = y,
-  )
-}
-
-fit_model <- function(data) {
-  model <- lm(y ~ x, data = data)
-  return (model)
-}
+library(tictoc)
 
 extract_estims <- function(model, beta_true, alpha) {
   estims_df <- tidy(model, conf.int = TRUE) %>%
@@ -45,7 +16,7 @@ extract_estims <- function(model, beta_true, alpha) {
 
 # We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
 extract_estim_boot_percent <- function(all_boot_betas, beta_true, alpha) {
-   # Compute summary statistics
+  # Compute summary statistics
   mean_beta_hat <- mean(all_boot_betas, na.rm = TRUE)  # Mean of bootstrap estimates
   # Percentile confidence interval
   percentile_ci <- quantile(all_boot_betas, probs = c(alpha/2, 1 - (alpha/2)), na.rm = TRUE)
@@ -61,53 +32,11 @@ extract_estim_boot_percent <- function(all_boot_betas, beta_true, alpha) {
   
   boot_percent_df <- boot_percent_df %>%
     mutate(coverage = ifelse(!is.na(ci_l) & !is.na(ci_u) & beta_true >= ci_l & beta_true <= ci_u, 1, 0))
-
+  
   return(boot_percent_df)
   
 }
 
-get_boot_data <- function (original_data, beta_true, sample_size, alpha, nboot) {
-  all_boot_betas <- rep(NA, nboot)
-  for (i in 1:nboot) {
-    boot_sample <- slice_sample(original_data, n = sample_size, replace = TRUE)
-    boot_sample_model <- fit_model(data = boot_sample)
-    # Extract beta_treatment
-    model_estims <- extract_estims(boot_sample_model, beta_true, alpha)
-    all_boot_betas[i] <- ifelse(nrow(model_estims) == 1, model_estims$beta_hat, NA)
-  }
-  return (all_boot_betas)
-}
-
-
-get_boot_t_data <- function(original_data, beta_true, sample_size, alpha, nboot, nboot_t) {
-  all_boot_betas <- rep(NA, nboot)
-  all_nested_boot_betas <- rep(NA, nboot_t)
-  se_stars <- rep(NA, nboot)
-  
-  
-  for (i in 1:nboot) {
-    boot_sample <- slice_sample(original_data, n = sample_size, replace = TRUE)
-    boot_sample_model <- fit_model(data = boot_sample)
-    
-    # Extract beta_treatment
-    first_model_estims <- extract_estims(boot_sample_model, beta_true, alpha)
-    all_boot_betas[i] <- ifelse(nrow(first_model_estims) == 1, first_model_estims$beta_hat, NA)
-    
-    for (j in 1:nboot_t) {
-      nested_boot_sample <- slice_sample(boot_sample, n = sample_size, replace = TRUE)
-      nested_boot_sample_model <- fit_model(data = nested_boot_sample)
-      nested_model_estims <- extract_estims(model = nested_boot_sample_model, 
-                                            beta_true = beta_true, 
-                                            alpha = alpha)
-      
-      all_nested_boot_betas[j] <- ifelse(nrow(nested_model_estims) == 1, nested_model_estims$beta_hat, NA)
-      
-    }
-    se_stars[i] = sd(all_nested_boot_betas,  na.rm = TRUE) 
-  }
-  
-  return (list(boot_betas = all_boot_betas, se_stars = se_stars))
-}
 
 extract_estim_boot_t <- function(original_data, all_boot_betas, se_stars, beta_true, alpha) {
   #Original model estimates
@@ -149,4 +78,3 @@ extract_estim_boot_t <- function(original_data, all_boot_betas, se_stars, beta_t
   return(boot_t_df)
   
 }
-

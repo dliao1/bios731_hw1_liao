@@ -3,8 +3,13 @@ library(doParallel)
 library(foreach)
 library(dplyr)
 library(here)
+library(tictoc)
 
-source(here("source", "utils.R"))
+source(here("source", "gen_data.R"))
+source(here("source", "fit_lm.R"))
+source(here("source", "run_bootstraps.R"))
+source(here("source", "get_estimates.R"))
+
 options(pillar.sigfig = 15)
 
 # Makes sure directories exist
@@ -50,26 +55,25 @@ param_grid <- expand.grid(
 # Seeds!
 set.seed(3000)
 seeds <- floor(runif(n_sim, 1, 10000))
+
 # Iterates through 18 parameter combinations
 for (i in 1:nrow(param_grid)) {
   params <- param_grid[i, ]
   # Runs 475 simulations per parameter combo
-  # Overall structure goal:  18 data frames x 475 rows for each method (Wald/percentile/t)
+  # sim_results structure: dataframe with 475 rows (simulations), and 4 columns (Wald/Bootstrap percentile/Bootstrap t/Simulation Data)
+  # , each of which is a 1 row dataframe for the specified method (i.e. sim_result$wald[[10]] = beta hat and Wald CI for the 10th 
+  # simulation run for the current parameter combination )
+
+  # At the end of all 475 simulations for the current scenario, I convert every row
+  # of sim_results to 1 row dataframes and bind them to dataframes for their corresponding method (Wald/percentile/etc.) 
   
-  # sim_results structure: dataframe with 475 rows, and 2 columns, each column is a list form of a 
-  # dataframe for specified method, i.e. sim_results$wald and sim_results$boot each have 475 rows, with each 1 row
-  # having info abt the estimated beta_hat, std error, confidence interval, etc. for that specific simulation run 
-  # Each simulation run adds another row to the dataframe.
-  
-  # At the end of all 475 simulations for the current scenario, I can just convert every row
-  # of sim_results to 1-row dataframes and bind them to their corresponding method (Wald/percentile/etc.) dataframe
   # End result: 
   # all_wald_estim = 1 dataframe, 475 rows
   
   sim_results <- foreach(
     j = 1:n_sim,
     .combine = rbind,
-    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here")
+    .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "tictoc")
   ) %dopar% {
     set.seed(seeds[j])
     # Generates simulated data
@@ -77,24 +81,25 @@ for (i in 1:nrow(param_grid)) {
                         beta_true = params$beta_true, 
                         err_type = params$err_type
                         )
-
-    # try to restructure this so that i get the bootstrapped data stuff here
-    
     
     # Computes Estimates
     # Note each: each result is one (1) single row
     
     model_fit <- fit_model(simdata)
     
-    
+    tic()
     wald_result <- extract_estims(model = model_fit, 
                                   beta_true = params$beta_true, 
                                   alpha = alpha)
-    wald_result <- cbind(wald_result, scenario = i, sim = j, params)
+    wald_time <- toc(quiet = TRUE)
+    wald_result <- cbind(wald_result, scenario = i, sim = j, params, time = wald_time$toc - wald_time$tic)
     
     # Computes Bootstrap Percentile estimates
     nboot <- 50
     nboot_t <- 10
+    
+    tic()
+    
     boot_data <- get_boot_data(original_data = simdata, 
                                beta_true = params$beta_true, 
                                sample_size = params$n,
@@ -105,11 +110,12 @@ for (i in 1:nrow(param_grid)) {
                                beta_true = params$beta_true,
                                alpha = alpha)
     
-
-    boot_percent_result <- cbind(boot_percent_result, scenario = i, sim = j, params)
+    boot_percent_time <- toc(quiet = TRUE)
+    
+    boot_percent_result <- cbind(boot_percent_result, scenario = i, sim = j, params, time = boot_percent_time$toc - boot_percent_time$tic)
     
     # Boot t estimates
-    
+    tic()
     boot_t_data <- get_boot_t_data(original_data = simdata, 
                                beta_true = params$beta_true, 
                                sample_size = params$n,
@@ -123,8 +129,9 @@ for (i in 1:nrow(param_grid)) {
                                           beta_true = params$beta_true,
                                           alpha = alpha)
     
+    boot_t_time <- toc(quiet = TRUE)
 
-    boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params)
+    boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params, time = boot_t_time$toc - boot_t_time$tic)
     
     # Casts 2 rows into 2 lists and makes 2 columns, 1 for each list
     tibble(
