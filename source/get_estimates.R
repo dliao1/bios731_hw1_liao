@@ -3,6 +3,7 @@ library(doParallel)
 library(foreach)
 library(tictoc)
 
+# Extract estimates from linear model
 extract_estims <- function(model, beta_true, alpha) {
   estims_df <- tidy(model, conf.int = TRUE) %>%
     filter(term == "x") %>%
@@ -14,12 +15,15 @@ extract_estims <- function(model, beta_true, alpha) {
   return (estims_df)
 }
 
-# We are given a df of x and y with n rows (for each iteration of the 475 n_sims)
+# Extracts estimates and bootstrap percentile intervals
 extract_estim_boot_percent <- function(all_boot_betas, beta_true, alpha) {
-  # Compute summary statistics
-  mean_beta_hat <- mean(all_boot_betas, na.rm = TRUE)  # Mean of bootstrap estimates
+  # Mean of bootstrap estimates
+  mean_beta_hat <- mean(all_boot_betas, na.rm = TRUE)  
+  
   # Percentile confidence interval
   percentile_ci <- quantile(all_boot_betas, probs = c(alpha/2, 1 - (alpha/2)), na.rm = TRUE)
+  
+  # Calculates se_beta_hat
   se_beta_hat = sd(all_boot_betas)
   
   boot_percent_df <- tibble(
@@ -29,7 +33,7 @@ extract_estim_boot_percent <- function(all_boot_betas, beta_true, alpha) {
     ci_u = percentile_ci[2]
   )
   
-  
+  # Calculates coverage
   boot_percent_df <- boot_percent_df %>%
     mutate(coverage = ifelse(!is.na(ci_l) & !is.na(ci_u) & beta_true >= ci_l & beta_true <= ci_u, 1, 0))
   
@@ -37,30 +41,31 @@ extract_estim_boot_percent <- function(all_boot_betas, beta_true, alpha) {
   
 }
 
-
+# Extracts estimates and bootstrap t intervals
 extract_estim_boot_t <- function(original_data, all_boot_betas, se_stars, beta_true, alpha) {
-  #Original model estimates
   
+  #Original model estimates
   original_data_model <- fit_model(data = original_data)
   original_model_estims <- extract_estims(original_data_model, beta_true, alpha)
   beta_hat <- ifelse(nrow(original_model_estims) == 1, original_model_estims$beta_hat, NA)
   
-  
-  # Compute summary statistics
-  mean_beta_hat <- mean(all_boot_betas, na.rm = TRUE)  # Mean of bootstrap estimates
+  # Mean of bootstrap estimates
+  mean_beta_hat <- mean(all_boot_betas, na.rm = TRUE)
   
   # Percentile confidence interval
   percentile_ci <- quantile(all_boot_betas, probs = c(alpha / 2, 1 - alpha / 2), na.rm = TRUE)
   
-  # quantile CI for bootstrap t
+  # Bootstrap t interval
   t_stars <- (all_boot_betas - beta_hat) / se_stars
   t_quants = quantile(t_stars, probs = c(alpha/2, 1-(alpha/2)),  na.rm = TRUE)
+  
+  # Calculates se_beta_hat
   se_beta_hat = sd(all_boot_betas)
   
-  # lower CI
-  boot_t_ci_l <- beta_hat - t_quants[2] * se_beta_hat
+  # Lower CI
+  boot_t_ci_l <- beta_hat - t_quants[2] * se_beta_hat # se_beta_hat estimated from top level bootstrap
   
-  # upper CI
+  # Upper CI
   boot_t_ci_u <- beta_hat - t_quants[1] * se_beta_hat
   
   

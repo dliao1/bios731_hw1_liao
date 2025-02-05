@@ -1,3 +1,4 @@
+# Loads required libraries
 library(tidyverse)
 library(doParallel)
 library(foreach)
@@ -5,14 +6,16 @@ library(dplyr)
 library(here)
 library(tictoc)
 
+# Loads required helper functions
 source(here("source", "gen_data.R"))
 source(here("source", "fit_lm.R"))
 source(here("source", "run_bootstraps.R"))
 source(here("source", "get_estimates.R"))
 
+# Increases significant figures in case of really small numbers in estimates
 options(pillar.sigfig = 15)
 
-# Makes sure directories exist
+# Creates intermediate directories to save results and data to
 if (!dir.exists(here("results"))) {
   dir.create(here("results"))
 }
@@ -35,12 +38,13 @@ if (!dir.exists(here("results", "sim_data"))) {
 cl <- makeCluster(12)  # Use 12 cores
 registerDoParallel(cl)
 
-# Simulation setup
+# Calculates required number of simulations
 mc_err <- 0.01
 cover <- 0.95
 alpha <- 1 - 0.95
 n_sim <- round((cover * (1 - cover)) / mc_err^2)
 
+# Calculates parameter combinations
 n <- c(10, 50, 500)
 beta_true <- c(0, 0.5, 2)
 err_type <- c(0, 1)  # 1 = normal, 0 = lognormal
@@ -52,20 +56,23 @@ param_grid <- expand.grid(
 )
 
 
-# Seeds!
+# Sets random seeds 
 set.seed(3000)
 seeds <- floor(runif(n_sim, 1, 10000))
 
 # Iterates through 18 parameter combinations
 for (i in 1:nrow(param_grid)) {
+  
+  # Gets current parameters
   params <- param_grid[i, ]
-  # Runs 475 simulations per parameter combo
-  # sim_results structure: dataframe with 475 rows (simulations), and 4 columns (Wald/Bootstrap percentile/Bootstrap t/Simulation Data)
-  # , each of which is a 1 row dataframe for the specified method (i.e. sim_result$wald[[10]] = beta hat and Wald CI for the 10th 
-  # simulation run for the current parameter combination )
+  
+  # Below foreach loop runs 475 simulations per parameter combo
+  # sim_results structure: dataframe with 475 rows (simulations), and 4 columns (Wald/Bootstrap percentile/Bootstrap t/Simulation Data),
+  # each of which is a 1 row dataframe for the specified method (i.e. sim_result$wald[[10]]: 1 row dataframe containing
+  # beta hat and Wald CI for the 10th simulation run for the current parameter combination )
 
   # At the end of all 475 simulations for the current scenario, I convert every row
-  # of sim_results to 1 row dataframes and bind them to dataframes for their corresponding method (Wald/percentile/etc.) 
+  # of sim_results back to 1 row dataframes and bind them to dataframes for their corresponding method (Wald/percentile/etc.) 
   
   # End result: 
   # all_wald_estim = 1 dataframe, 475 rows
@@ -75,19 +82,22 @@ for (i in 1:nrow(param_grid)) {
     .combine = rbind,
     .packages = c("tibble", "dplyr", "tidyverse", "broom", "here", "tictoc")
   ) %dopar% {
+    # Sets current seed for the simulation run
     set.seed(seeds[j])
+    
     # Generates simulated data
     simdata <- gen_data(n = params$n, 
                         beta_true = params$beta_true, 
                         err_type = params$err_type
                         )
     
-    # Computes Estimates
+    # Fits model from simulated data
     # Note each: each result is one (1) single row
-    
     model_fit <- fit_model(simdata)
     
     tic()
+    
+    # Extracts wald CI
     wald_result <- extract_estims(model = model_fit, 
                                   beta_true = params$beta_true, 
                                   alpha = alpha)
@@ -100,12 +110,14 @@ for (i in 1:nrow(param_grid)) {
     
     tic()
     
+    # Generates bootstrap data
     boot_data <- get_boot_data(original_data = simdata, 
                                beta_true = params$beta_true, 
                                sample_size = params$n,
                                nboot = nboot,
                                alpha = alpha)
     
+    # Extracts bootstrap estimates
     boot_percent_result <- extract_estim_boot_percent(all_boot_betas = boot_data,
                                beta_true = params$beta_true,
                                alpha = alpha)
@@ -133,7 +145,7 @@ for (i in 1:nrow(param_grid)) {
 
     boot_t_result <- cbind(boot_t_result, scenario = i, sim = j, params, time = boot_t_time$toc - boot_t_time$tic)
     
-    # Casts 2 rows into 2 lists and makes 2 columns, 1 for each list
+    # Casts 4 rows into 4 lists and makes 4 columns, 1 for each list
     tibble(
       wald = list(wald_result),
       boot_percent = list(boot_percent_result),
@@ -142,21 +154,21 @@ for (i in 1:nrow(param_grid)) {
     )
   }
   
-  # Turns each row in wald column into dataframe and binds all rows together for all 475 wald results for current
-  #simulation
+  # Turns each row in each column into a dataframe and binds all rows together for all 475  results for current
+  # simulation
   all_wald_estim <- bind_rows(lapply(sim_results$wald, as.data.frame))
   all_boot_percent_estim <- bind_rows(lapply(sim_results$boot_percent, as.data.frame))
   all_sim_data <- bind_rows(lapply(sim_results$sim_data, as.data.frame))
   all_boot_t_estim <- bind_rows(lapply(sim_results$boot_t, as.data.frame))
   
-  # Save **only** the single scenario’s results, not the full list!
+  # Saves **only** the current parameter combination’s results
   save(all_wald_estim, file = here("results", "sim_wald", paste0("scenario_", i, ".RDA")))
   save(all_boot_percent_estim, file = here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA")))
   save(all_sim_data, file = here("results", "sim_data", paste0("scenario_", i, ".RDA")))
   save(all_boot_t_estim, file = here("results", "sim_boot_t", paste0("scenario_", i, ".RDA")))
   
   
-  # Print progress
+  # Prints progress
   cat(sprintf("Saved scenario %d (n = %d, beta_true = %.2f, err_type = %d)\n",
               i, params$n, params$beta_true, params$err_type))
 }

@@ -2,16 +2,28 @@
 title: "Homework 1"
 header-includes: \usepackage{multirow}
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-  pdf_document: default
 urlcolor: blue
 ---
 
 ```{r, include=FALSE}
 
 library(tidyverse)
+library(here)
+library(tidyr)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+library(kableExtra)
+
 knitr::opts_chunk$set(tidy = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
 ```
 
 ## Context
@@ -96,15 +108,35 @@ In our simulation, we want to
 Answer the following questions: 
 
 * How many simulation scenarios will you be running?
+We will be running 3 * 3 * 2 = 18 simulation scenarios
+
 * What are the estimand(s)
+The estimands are the average treatment effect $\beta_{treatment}$ and the 
+standard error of treatment effect $se(\beta_{treatment})$
+
 * What method(s) are being evaluated/compared?
+3 methods are being compared - Wald confidence intervals, nonparametric 
+bootstrap percentile intervals, and nonparametric boostrap t-intervals.
+
 * What are the performance measure(s)?
+The performance measures we are using are bias, coverage, and computation time.
 
 
 ### Problem 1.2 nSim 
 
 Based on desired coverage of 95\% with Monte Carlo error of no more than 1\%, how many simulations ($n_{sim}$) should we perform for each simulation scenario?  Implement this number of simulations throughout your simulation study.
 
+```{r}
+num_scenarios <- 18
+
+mc_err <- 0.01
+cover <- 0.95
+alpha <- 1 - 0.95
+n_sim <- (cover * (1 - cover))/mc_err^2
+n_sim
+```
+
+We should perform 475 simulations for each simulation scenario.
 
 ### Problem 1.3 Implementation 
 
@@ -131,6 +163,243 @@ Create a plot or table to summarize simulation results across scenarios and meth
 - Computation time across methods
 
 If creating a plot, I encourage faceting. Include informative captions for each plot and/or table.
+
+
+```{r}
+all_wald_results <- vector("list", num_scenarios)
+all_boot_p_results <- vector("list", num_scenarios)
+all_boot_t_results <- vector("list", num_scenarios)
+
+
+
+# Loop through each scenario file
+for (i in 1:num_scenarios) {
+  file_path <- here("results", "sim_wald", paste0("scenario_", i, ".RDA"))
+  load(file_path)
+  
+  all_wald_results[[i]] <- all_wald_estim %>% 
+    mutate(err_type = ifelse(err_type == 0, "Lognormal", "Normal"))
+  
+  file_path <- here("results", "sim_boot_percentile", paste0("scenario_", i, ".RDA"))
+  load(file_path)
+  
+  all_boot_p_results[[i]] <- all_boot_percent_estim %>%
+      rename(se_beta = se_beta_hat) %>% 
+    mutate(err_type = ifelse(err_type == 0, "Lognormal", "Normal"))
+  
+  file_path <- here("results", "sim_boot_t", paste0("scenario_", i, ".RDA"))
+  load(file_path)
+  
+  all_boot_t_results[[i]] <- all_boot_t_estim %>%
+      rename(se_beta = se_beta_hat) %>% 
+    mutate(err_type = ifelse(err_type == 0, "Lognormal", "Normal"))
+
+}
+
+
+```
+
+```{r}
+all_biases <- rep(NA, num_scenarios)
+var_hat <- rep(NA, num_scenarios)
+wald_coverage <- rep(NA, num_scenarios)
+boot_p_coverage <- rep(NA, num_scenarios)
+boot_t_coverage <- rep(NA, num_scenarios)
+wald_time <- rep(NA, num_scenarios)
+boot_p_time <- rep(NA, num_scenarios)
+boot_t_time <- rep(NA, num_scenarios)
+all_n <- rep(NA, num_scenarios)
+all_beta_true <- rep(NA, num_scenarios)
+all_err_type <- rep(NA, num_scenarios)
+scenario_num <- rep(NA, num_scenarios)
+mean_wald_se_beta <- rep(NA, num_scenarios)
+mean_boot_p_se_beta <- rep(NA, num_scenarios)
+mean_boot_t_se_beta <- rep(NA, num_scenarios)
+se_hat <- rep(NA, num_scenarios)
+se_hat_se <- rep(NA, num_scenarios)
+  
+for (i in 1:num_scenarios) {
+  
+  all_biases[i] <- (1/n_sim) * sum(all_wald_results[[i]]$beta_hat - all_wald_results[[i]]$beta_true)
+  var_hat[i] <- sd(all_wald_results[[i]]$beta_hat)
+  se_hat[i] <- mean(all_wald_results[[i]]$se_beta)
+  se_hat_se[i] <- sd(all_wald_results[[i]]$se_beta)
+  wald_coverage[i] <- mean(all_wald_results[[i]]$coverage == 1) * 100
+  boot_p_coverage[i] <- mean(all_boot_p_results[[i]]$coverage == 1) * 100
+  boot_t_coverage[i] <- mean(all_boot_t_results[[i]]$coverage == 1) * 100
+  wald_time[i] <- mean(all_wald_results[[i]]$time)
+  boot_p_time[i] <- mean(all_boot_p_results[[i]]$time)
+  boot_t_time[i] <- mean(all_boot_t_results[[i]]$time)
+  all_n[i] <- unique(all_wald_results[[i]]$n)[[1]]
+  all_beta_true[i] <- unique(all_wald_results[[i]]$beta_true)
+  all_err_type[i] <- unique(all_wald_results[[i]]$err_type)
+  mean_wald_se_beta[i] <- mean(all_wald_results[[i]]$se_beta)
+  mean_boot_p_se_beta[i] <- mean(all_boot_p_results[[i]]$se_beta)
+  mean_boot_t_se_beta[i] <- mean(all_boot_t_results[[i]]$se_beta)
+
+  
+  scenario_num[i] <- i
+}
+
+df <- bind_cols(
+  scenario_num = scenario_num, 
+  n = all_n, 
+  beta_true = all_beta_true, 
+  error_type = all_err_type, 
+  bias = all_biases,
+  var = var_hat,
+  se_hat = se_hat,
+  se_hat_se = se_hat_se,
+  wald_coverage = wald_coverage,
+  wald_time = wald_time,
+  wald_se = mean_wald_se_beta,
+  boot_p_coverage = boot_p_coverage,
+  boot_p_time = boot_p_time,
+  boot_p_se = mean_boot_p_se_beta,
+  boot_t_coverage = boot_t_coverage,
+  boot_t_time = boot_t_time,
+  boot_t_se = mean_boot_t_se_beta
+  )
+
+
+
+
+```
+
+#### Bias
+```{r}
+bias_table <- df %>%
+  select(n, beta_true, error_type, bias) %>%  
+  arrange(n, beta_true) %>%
+  rename("N" = n, "True Beta" = beta_true) %>%
+  pivot_wider(
+    names_from = error_type,
+    values_from = bias,   
+  )
+
+kable(bias_table, digits = 3, caption = "Bias Summary Table")
+```
+
+#### Coverage
+```{r}
+coverage_table <- df %>%
+  select(n, beta_true, error_type, wald_coverage, boot_p_coverage, boot_t_coverage) %>%
+  arrange(n, beta_true, error_type) %>%
+  pivot_wider(
+    names_from = error_type,  
+    values_from = c(wald_coverage, boot_p_coverage, boot_t_coverage),
+    names_glue = "{error_type} {.value}",  # Dynamically generates column names
+  ) %>%
+  select(n, beta_true, starts_with("Lognormal"), starts_with("Normal")) %>%
+  rename(
+    "N" = n,
+    "True Beta" = beta_true,
+    "Lognormal Wald CI" = "Lognormal wald_coverage",
+    "Lognormal Bootstrap Percentile CI" = "Lognormal boot_p_coverage",
+    "Lognormal Bootstrap t CI" = "Lognormal boot_t_coverage",
+    "Normal Wald CI" = "Normal wald_coverage",
+    "Normal Bootstrap Percentile CI" = "Normal boot_p_coverage",
+    "Normal Bootstrap t CI" = "Normal boot_t_coverage"
+  )
+
+
+kable(coverage_table, digits = 3, caption = "Coverage Summary Table") %>%
+  add_header_above(c(" " = 2, "Lognormal" = 3, "Normal" = 3)) %>%
+  column_spec(1, width = "1cm") %>%
+  column_spec(2, width = "1cm") %>%
+  column_spec(3:5, width = "2cm") %>%
+  column_spec(6:8, width = "2cm")
+
+```
+
+#### Computation Time
+```{r}
+time_table <- df %>%
+  select(n, beta_true, error_type, wald_time, boot_p_time, boot_t_time) %>%
+  arrange(n, beta_true, error_type) %>%
+  pivot_wider(
+    names_from = c(error_type),
+    values_from = c(wald_time, boot_p_time, boot_t_time),
+    names_glue = "{error_type} {.value}", 
+  ) %>%
+  select(n, beta_true, starts_with("Lognormal"), starts_with("Normal")) %>%
+  rename(
+    "N" = n,
+    "True Beta" = beta_true,
+    "Lognormal Wald Time" = "Lognormal wald_time",
+    "Lognormal Bootstrap Percentile Time" = "Lognormal boot_p_time",
+    "Lognormal Bootstrap t Time" = "Lognormal boot_t_time",
+    "Normal Wald Time" = "Normal wald_time",
+    "Normal Bootstrap Percentile Time" = "Normal boot_p_time",
+    "Normal Bootstrap t Time" = "Normal boot_t_time"
+  )
+
+kable(time_table, digits = 3, caption = "Computation Time Summary Table") %>%
+  add_header_above(c(" " = 2, "Lognormal" = 3, "Normal" = 3)) %>%
+  column_spec(1, width = "1cm") %>%
+  column_spec(2, width = "1cm") %>%
+  column_spec(3:5, width = "2cm") %>%
+  column_spec(6:8, width = "2cm")
+```
+
+
+
+#### Standard Error of Beta (Distribution)
+```{r}
+all_results <- vector("list", num_scenarios)
+
+for (i in 1:num_scenarios) {
+  all_results[[i]] <- bind_rows(
+    all_wald_results[[i]] %>%
+      mutate(method = "Wald"),
+    all_boot_p_results[[i]] %>%
+      mutate(method = "Bootstrap Percentile"),
+    all_boot_t_results[[i]] %>%
+      mutate(method = "Bootstrap t") 
+  )
+}
+
+combined_df <- bind_rows(all_results)
+
+wald_plot <- ggplot(filter(combined_df, method == "Wald"), aes(x = se_beta)) +
+  geom_histogram(fill = "blue", alpha = 0.5, bins = 30) +
+  facet_grid(n ~ err_type + beta_true, scales = "free_y") +  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
+  ) +
+  labs(title = "Wald Method", x = "se_beta", y = "Count") +
+  coord_cartesian(xlim = c(0, 2)) 
+
+boot_p_plot <- ggplot(filter(combined_df, method == "Bootstrap Percentile"), aes(x = se_beta)) +
+  geom_histogram(fill = "green", alpha = 0.5, bins = 30) +
+  facet_grid(n ~ err_type + beta_true, scales = "free_y") + 
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
+  ) +
+  labs(title = "Bootstrap Percentile Method", x = "se_beta", y = "Count") +
+  coord_cartesian(xlim = c(0, 2)) 
+
+boot_t_plot <- ggplot(filter(combined_df, method == "Bootstrap t"), aes(x = se_beta)) +
+  geom_histogram(fill = "red", alpha = 0.5, bins = 30) +
+  facet_grid(n ~ err_type + beta_true, scales = "free_y") + 
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
+  ) +
+  labs(title = "Bootstrap t Method", x = "se_beta", y = "Count") +
+  coord_cartesian(xlim = c(0, 2))  
+
+
+print(wald_plot)
+print(boot_p_plot)
+print(boot_t_plot)
+
+
+```
+
+
 
 ### Problem 1.5 Discussion
 
