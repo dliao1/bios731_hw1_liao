@@ -60,6 +60,8 @@ To that end:
 * Submit your whole project folder to GitHub 
 * Submit a PDF knitted from Rmd to Canvas. Your solutions to the problem here should be implemented in your .Rmd file, and your git commit history should reflect the process you used to solve these Problems.
 
+Link to repo: https://github.com/dliao1/bios731_hw1_liao
+
 ## Problem 1
 
 Simulation study: our goal in this homework will be to plan a well-organized simulation study for multiple linear regression and bootstrapped confidence intervals. 
@@ -108,17 +110,21 @@ In our simulation, we want to
 Answer the following questions: 
 
 * How many simulation scenarios will you be running?
-We will be running 3 * 3 * 2 = 18 simulation scenarios
+
+We will be running 3 * 3 * 2 = 18 simulation scenarios.
 
 * What are the estimand(s)
+
 The estimands are the average treatment effect $\beta_{treatment}$ and the 
-standard error of treatment effect $se(\beta_{treatment})$
+standard error of treatment effect $se(\beta_{treatment})$.
 
 * What method(s) are being evaluated/compared?
+
 3 methods are being compared - Wald confidence intervals, nonparametric 
 bootstrap percentile intervals, and nonparametric boostrap t-intervals.
 
 * What are the performance measure(s)?
+
 The performance measures we are using are bias, coverage, and computation time.
 
 
@@ -280,6 +286,10 @@ bias_table <- df %>%
 kable(bias_table, digits = 3, caption = "Bias Summary Table")
 ```
 
+This table shows the average bias for linear regression models fit at n = (10,50,500),
+true betas of (0, 0.5, 2.0), with errors either from the lognormal distribution (with mean 0 
+and variance log(2)) or the normal distribution (with mean 0 and variance 2).
+
 #### Coverage
 ```{r}
 coverage_table <- df %>%
@@ -312,6 +322,13 @@ kable(coverage_table, digits = 3, caption = "Coverage Summary Table") %>%
 
 ```
 
+This table shows the coverage for confidence intervals calculated using 
+3 methods: Wald, Bootstrap Percentile, and Bootstrap t. Note that the number
+of bootstrap samples per simulation run was 50, with 10 nested bootstrap samples in
+the case of bootstrap t intervals.
+
+\pagebreak
+
 #### Computation Time
 ```{r}
 time_table <- df %>%
@@ -340,11 +357,16 @@ kable(time_table, digits = 3, caption = "Computation Time Summary Table") %>%
   column_spec(2, width = "1cm") %>%
   column_spec(3:5, width = "2cm") %>%
   column_spec(6:8, width = "2cm")
+
 ```
 
-
-
+This table shows the average computation time for confidence intervals calculated using 
+3 methods: Wald, Bootstrap Percentile, and Bootstrap t. Note that the number
+of bootstrap samples per simulation run was 50, with 10 nested bootstrap samples 
+when calculating bootstrap t intervals.
+      
 #### Standard Error of Beta (Distribution)
+
 ```{r}
 all_results <- vector("list", num_scenarios)
 
@@ -365,9 +387,7 @@ wald_plot <- ggplot(filter(combined_df, method == "Wald"), aes(x = se_beta)) +
   geom_histogram(fill = "blue", alpha = 0.5, bins = 30) +
   facet_grid(n ~ err_type + beta_true, scales = "free_y") +  
   theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
-  ) +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1)) +
   labs(title = "Wald Method", x = "se_beta", y = "Count") +
   coord_cartesian(xlim = c(0, 2)) 
 
@@ -375,9 +395,7 @@ boot_p_plot <- ggplot(filter(combined_df, method == "Bootstrap Percentile"), aes
   geom_histogram(fill = "green", alpha = 0.5, bins = 30) +
   facet_grid(n ~ err_type + beta_true, scales = "free_y") + 
   theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
-  ) +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1)) +
   labs(title = "Bootstrap Percentile Method", x = "se_beta", y = "Count") +
   coord_cartesian(xlim = c(0, 2)) 
 
@@ -385,26 +403,53 @@ boot_t_plot <- ggplot(filter(combined_df, method == "Bootstrap t"), aes(x = se_b
   geom_histogram(fill = "red", alpha = 0.5, bins = 30) +
   facet_grid(n ~ err_type + beta_true, scales = "free_y") + 
   theme_minimal() +
-  theme(
-    axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
-  ) +
+  theme(axis.text.x = element_text(size = 8, angle = 45, hjust = 1)) +
   labs(title = "Bootstrap t Method", x = "se_beta", y = "Count") +
   coord_cartesian(xlim = c(0, 2))  
 
+```
 
+```{r, fig.align="center", fig.width=8, fig.height=6}
 print(wald_plot)
 print(boot_p_plot)
 print(boot_t_plot)
-
-
 ```
 
+These three graphs show the distribution of standard errors for our estimated 
+beta hat across n = (10, 50, 500) and true betas of (0, 0.5, 2), separated by distribution type
+(either lognormal or normal).
 
 
 ### Problem 1.5 Discussion
 
 Interpret the results summarized in Problem 1.4. First, write a **paragraph** summarizing the main findings of your simulation study. Then, answer the specific questions below.
 
+
+The main findings of the simulation study regarding bias was that beta hats
+estimated from a distribution with right-skewed/lognormal errors
+tended to have a larger bias, but this bias seemed to decrease as sample size
+increased from 50 to 500, suggesting larger sample sizes could be used to 
+"make up" for not having normally distributed errors, which is a key assumption when fitting
+linear regression models. Additionally, after computing coverages for the 3 methods used
+to generate confidence intervals (Wald, Bootstrap percentile, and Bootstrap t),
+it was found that Wald intervals tended to have the best overall coverage across all
+combinations of n, true betas, and errors generated from lognormal/normal distributions, at
+around ~93%. Comparing and contrasting the two bootstrap methods, the bootstrap t intervals
+tended to have better coverage than the bootstrap percentile intervals, especially when 
+errors were non-normal, but also looked to have worse coverage at smaller sample sizes (when n = 10). 
+However, since only 10 nested bootstrap samples were taken to calculate a t critical value, this
+poor coverage could also be in part due to this limitation. 
+
 - How do the different methods for constructing confidence intervals compare in terms of computation time?
+
+In terms of computation time, Wald confidence intervals were the fastest to compute,
+taking on average only 0.03 seconds, while bootstrap percentile intervals took an average of 1.5 seconds.
+Bootstrap t intervals took the longest to calculate by far, averaging 16 seconds.
+
 - Which method(s) for constructing confidence intervals provide the best coverage when $\epsilon_i \sim N(0, 2)$?
+
+When errors were normally distributed, Wald intervals had the best coverage.
+
 - Which method(s) for constructing confidence intervals provide the best coverage when $\epsilon_i \sim logNormal(0, \log (2))$?
+
+When errors were right skewed, Wald intervals still had the best coverage.
